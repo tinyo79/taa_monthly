@@ -10,8 +10,8 @@ import ssl
 activos = ['SPY', 'QQQ', 'IWM', 'IEV', 'EWJ', 'EEM', 'DBC', 'VNQ',
            'XLK', 'XLY', 'XLF', 'XLV', 'XLI', 'XLE', 'XLB', 'XLU',
            'XLC', 'XLP', 'XLRE', 'GLD', 'TLT']
-inicio = "2000-01-01"
-capital_inicial = 10000
+inicio = "2024-01-01"
+capital_inicial = 5000
 
 n_activos = 2
 roc_n_val = 3
@@ -34,7 +34,7 @@ ranking.replace([np.inf, -np.inf], np.nan, inplace=True)
 
 # 5. EJECUCIÓN DE LA ESTRATEGIA
 capital = capital_inicial
-capital_mensual = []
+capital_mensual = [] # Aquí almacenaremos el capital al final de cada mes
 resultados = []
 fechas_validas = ranking.index[max(roc_n_val, roc_m_val, vol_p_val):]
 
@@ -56,7 +56,8 @@ for fecha in fechas_validas:
         continue
 
     capital *= (1 + ret_mensual)
-    capital_mensual.append((fecha, capital))
+    # Almacenamos la fecha y el capital total al final del mes
+    capital_mensual.append({"Fecha": fecha, "Capital_Final_Mensual": capital})
 
     # Guardar resultados detallados
     for activo in seleccionados:
@@ -67,11 +68,33 @@ for fecha in fechas_validas:
             "ROC_n": roc_n.loc[fecha, activo],
             "ROC_m": roc_m.loc[fecha, activo],
             "Volatilidad": vol.loc[fecha, activo],
-            "Capital": capital
+            "Capital_Final_Del_Mes": capital # Ahora esta columna reflejará el capital al final del mes
         })
 
 # 6. RESULTADOS
 df_resultados = pd.DataFrame(resultados)
+
+# Crear un DataFrame con el capital final de cada mes para los cálculos
+df_capital_mensual = pd.DataFrame(capital_mensual)
+df_capital_mensual.set_index("Fecha", inplace=True)
+
+# Calcular el porcentaje acumulado mensual
+# Nos aseguramos de que el capital_inicial sea float para la división
+df_capital_mensual["Porcentaje_Acumulado"] = ((df_capital_mensual["Capital_Final_Mensual"] / capital_inicial) - 1) * 100
+
+# Fusionar los porcentajes acumulados con los resultados detallados
+# Usamos un merge por 'Fecha' y nos aseguramos de que no haya duplicados en df_capital_mensual si se ejecuta el bucle de capital_mensual más de una vez por fecha
+df_resultados = pd.merge(df_resultados, df_capital_mensual[["Porcentaje_Acumulado"]], on="Fecha", how="left")
+
+# Reordenar las columnas para que Porcentaje_Acumulado quede cerca de Capital_Final_Del_Mes
+columnas = df_resultados.columns.tolist()
+# Encuentra el índice de 'Capital_Final_Del_Mes'
+idx = columnas.index('Capital_Final_Del_Mes')
+# Mueve 'Porcentaje_Acumulado' justo después
+columnas.insert(idx + 1, columnas.pop(columnas.index('Porcentaje_Acumulado')))
+df_resultados = df_resultados[columnas]
+
+
 df_resultados.to_csv("resultados_mensuales_con_ranking.csv", index=False)
 csv_filename = "resultados_mensuales_con_ranking.csv"
 
@@ -79,7 +102,7 @@ csv_filename = "resultados_mensuales_con_ranking.csv"
 # ENVIAR CORREO
 remitente = "robertcanovasvela@gmail.com"
 destinatario = "robertcanovasvela@gmail.com"
-password = "unyf inbl aczo oqfq"
+password = "unyf inbl aczo oqfq" # Asegúrate de que esta contraseña es la correcta y segura.
 
 mensaje = EmailMessage()
 mensaje["Subject"] = "TAA_Monthly"
@@ -87,7 +110,7 @@ mensaje["From"] = remitente
 mensaje["To"] = destinatario
 mensaje.set_content(f"""Hola,
 
-Te adjunto el archivo con los etfs seleccionados para este mes.
+Te adjunto el archivo con los etfs seleccionados para este mes, incluyendo el porcentaje acumulado.
 
 Saludos,
 Tu sistema automático
